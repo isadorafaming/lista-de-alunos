@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lista de Alunos</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f4f7fb;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 50px auto;
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      text-align: center;
+      color: #111827;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #6b7280;
+      margin-bottom: 30px;
+    }
+
+    .form {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 25px;
+    }
+
+    .form input {
+      flex: 1;
+      padding: 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form input:focus {
+      border-color: #2563eb;
+    }
+
+    .form button {
+      border: none;
+      background: #2563eb;
+      color: white;
+      padding: 14px 22px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-weight: bold;
+    }
+
+    .form button:hover {
+      background: #1d4ed8;
+    }
+
+    .status {
+      margin-bottom: 18px;
+      font-size: 14px;
+      min-height: 18px;
+    }
+
+    .success {
+      color: #15803d;
+    }
+
+    .error {
+      color: #dc2626;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    thead {
+      background: #111827;
+      color: white;
+    }
+
+    th, td {
+      padding: 14px;
+      text-align: left;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: #f9fafb;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #eef2ff;
+    }
+
+    tbody tr:hover {
+      background: #dbeafe;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 30px;
+      color: #6b7280;
+    }
+
+    .loading {
+      text-align: center;
+      color: #6b7280;
+      padding: 15px;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        margin: 20px;
+        padding: 20px;
+      }
+
+      .form {
+        flex-direction: column;
+      }
+
+      .form button {
+        width: 100%;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Lista de Alunos</h1>
+    <div class="subtitle">
+      Cadastro conectado ao Google Planilhas + Apps Script
+    </div>
+
+    <div class="form">
+      <input
+        type="text"
+        id="studentName"
+        placeholder="Digite o nome do aluno"
+      />
+
+      <button id="saveButton">
+        Salvar
+      </button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nome</th>
+            <th>Criado em</th>
+          </tr>
+        </thead>
+
+        <tbody id="studentsTable">
+          <tr>
+            <td colspan="3" class="loading">
+              Carregando alunos...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    /*
+      ============================================
+      CONFIGURAÇÃO
+      ============================================
+
+      Cole aqui a URL do Web App do Apps Script.
+
+      Exemplo:
+      https://script.google.com/macros/s/AKfycbxxxxxxxxxxxxxxxx/exec
+    */
+    const CONFIG = {
+      WEB_APP_URL: "COLE_AQUI_A_URL_DO_WEB_APP"
+    };
+
+    const tableBody = document.getElementById("studentsTable");
+    const statusEl = document.getElementById("status");
+    const inputEl = document.getElementById("studentName");
+    const buttonEl = document.getElementById("saveButton");
+
+    /*
+      ============================================
+      JSONP
+      ============================================
+
+      GitHub Pages é estático e sofre CORS
+      com chamadas AJAX normais.
+
+      JSONP resolve isso usando <script>.
+    */
+
+    function jsonpRequest(params = {}) {
+      return new Promise((resolve, reject) => {
+
+        const callbackName =
+          "jsonp_callback_" +
+          Date.now() +
+          "_" +
+          Math.floor(Math.random() * 100000);
+
+        params.callback = callbackName;
+
+        const query = new URLSearchParams(params).toString();
+
+        const script = document.createElement("script");
+
+        script.src = `${CONFIG.WEB_APP_URL}?${query}`;
+
+        window[callbackName] = function(data) {
+          resolve(data);
+
+          delete window[callbackName];
+
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        };
+
+        script.onerror = function() {
+          reject(new Error("Erro na requisição JSONP"));
+
+          delete window[callbackName];
+
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        };
+
+        document.body.appendChild(script);
+      });
+    }
+
+    function showStatus(message, type = "success") {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`;
+    }
+
+    function clearStatus() {
+      statusEl.textContent = "";
+      statusEl.className = "status";
+    }
+
+    function formatDate(dateString) {
+      try {
+        const date = new Date(dateString);
+
+        return date.toLocaleString("pt-BR");
+      } catch {
+        return dateString;
+      }
+    }
+
+    function renderStudents(students) {
+
+      if (!students || students.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="3" class="empty">
+              Nenhum aluno cadastrado
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tableBody.innerHTML = students.map((student, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtml(student.nome)}</td>
+          <td>${formatDate(student.criadoEm)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    async function loadStudents() {
+
+      try {
+
+        const response = await jsonpRequest({
+          action: "list"
+        });
+
+        if (response.success) {
+          renderStudents(response.students);
+        } else {
+          showStatus(response.message || "Erro ao carregar alunos", "error");
+        }
+
+      } catch (error) {
+
+        console.error(error);
+
+        showStatus("Erro ao carregar alunos", "error");
+
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="3" class="empty">
+              Erro ao carregar dados
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    async function addStudent() {
+
+      clearStatus();
+
+      const name = inputEl.value.trim();
+
+      if (!name) {
+        showStatus("Digite um nome", "error");
+        return;
+      }
+
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Salvando...";
+
+      try {
+
+        const response = await jsonpRequest({
+          action: "add",
+          name: name
+        });
+
+        if (response.success) {
+
+          showStatus("Aluno salvo com sucesso!");
+
+          inputEl.value = "";
+
+          await loadStudents();
+
+        } else {
+
+          showStatus(
+            response.message || "Erro ao salvar aluno",
+            "error"
+          );
+        }
+
+      } catch (error) {
+
+        console.error(error);
+
+        showStatus("Erro ao salvar aluno", "error");
+
+      } finally {
+
+        buttonEl.disabled = false;
+        buttonEl.textContent = "Salvar";
+      }
+    }
+
+    buttonEl.addEventListener("click", addStudent);
+
+    inputEl.addEventListener("keypress", function(event) {
+      if (event.key === "Enter") {
+        addStudent();
+      }
+    });
+
+    loadStudents();
+  </script>
+
+</body>
+</html>
